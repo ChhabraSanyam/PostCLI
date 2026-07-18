@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+from PIL import Image
+import pytest
+
+from postcli.inspection import inspect_photo_set
+from postcli.models import CarouselPlan, CarouselPlanSlide
+from postcli.project import create_project, load_project, save_project, update_project
+from postcli.render import export_carousel, render_preview
+
+
+def make_image(path, size, color):
+    Image.new("RGB", size, color).save(path)
+
+
+def fixture_assets(tmp_path):
+    paths = []
+    for index, (size, color) in enumerate([((500, 800), "red"), ((800, 500), "blue"), ((600, 600), "green"), ((500, 800), "yellow")]):
+        path = tmp_path / f"asset-{index}.png"
+        make_image(path, size, color)
+        paths.append(path)
+    return inspect_photo_set(paths)
+
+
+def test_create_save_edit_render_and_export_carousel(tmp_path):
+    assets = fixture_assets(tmp_path)
+    plan = CarouselPlan(
+        name="Summer test",
+        slides=[
+            CarouselPlanSlide(template_id="asymmetric-grid", asset_ids=[asset.id for asset in assets[:3]], headline="Weekend"),
+            CarouselPlanSlide(template_id="before-after", asset_ids=[asset.id for asset in assets[2:]], palette=["#222222", "#eeeeee"]),
+        ],
+    )
+    project = create_project(plan, assets)
+    project.canvas.width = 400
+    project.canvas.height = 500
+    source = save_project(project, tmp_path / "summer")
+    update_project(project, "adjust_asset", 0, {"asset_id": assets[0].id, "focus_x": 0.2, "brightness": 1.2})
+    update_project(project, "reorder_slide", values={"from_index": 1, "to_index": 0})
+    save_project(project, source)
+
+    preview = render_preview(load_project(source), tmp_path / "preview.png")
+    outputs = export_carousel(load_project(source), tmp_path / "exports")
+
+    assert Image.open(preview).size == (400, 500)
+    assert [path.name for path in outputs] == ["01-summer-test.png", "02-summer-test.png"]
+    assert all(path.exists() for path in outputs)
+    assert load_project(source).slides[1].assets[0].brightness == 1.2
+
+
+def test_project_rejects_unknown_assets_and_invalid_template_capacity(tmp_path):
+    assets = fixture_assets(tmp_path)
+    unknown = CarouselPlan(name="Bad", slides=[CarouselPlanSlide(template_id="clean-grid", asset_ids=["not-here"])])
+    with pytest.raises(ValueError, match="unknown asset"):
+        create_project(unknown, assets)
+    too_many = CarouselPlan(name="Bad", slides=[CarouselPlanSlide(template_id="clean-grid", asset_ids=[asset.id for asset in assets[:3]])])
+    with pytest.raises(ValueError, match="at most"):
+        create_project(too_many, assets)
+
+
+def test_slide_edit_boundaries(tmp_path):
+    assets = fixture_assets(tmp_path)
+    project = create_project(CarouselPlan(name="One", slides=[CarouselPlanSlide(template_id="clean-grid", asset_ids=[assets[0].id])]), assets)
+    with pytest.raises(ValueError, match="at least one"):
+        update_project(project, "delete_slide", 0)
+    with pytest.raises(ValueError, match="few slots"):
+        update_project(project, "set_assets", 0, {"asset_ids": [asset.id for asset in assets[:3]]})

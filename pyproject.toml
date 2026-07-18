@@ -1,0 +1,30 @@
+[project]
+name = "postcli"
+version = "0.1.0"
+description = "Local-first, MCP-guided social carousel composer"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.12.0",
+  "pillow>=10.4.0",
+  "pydantic>=2.8.0",
+  "textual>=0.80.0",
+  "typer>=0.12.0",
+]
+
+[project.scripts]
+postcli = "postcli.cli:app"
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/postcli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = ["pytest>=8.3.0"]
