@@ -18,8 +18,8 @@ def test_mcp_inspection_returns_metadata_and_image(tmp_path):
     Image.new("RGB", (300, 500), "purple").save(photo)
     result = mcp_server.inspect_photo_set([str(photo)], str(tmp_path / "sheet.png"))
 
-    assert len(result) == 2
-    assert "portrait" in result[0]
+    assert len(result.content) == 2
+    assert "portrait" in result.content[0].text
     assert (tmp_path / "sheet.png").exists()
 
 

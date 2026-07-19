@@ -46,7 +46,7 @@ class PostEditor(App[None]):
         self.query_one("#summary", Static).update(
             f"[b]{self.project.name}[/b]  •  Slide {self.slide_index + 1}/{len(self.project.slides)}\n\n"
             f"Template: [cyan]{slide.template_id}[/cyan]\nAssigned assets: {assigned}\nPalette: {', '.join(slide.palette)}\n\n"
-            "[dim]n/p navigate · [/] swap template · d duplicate · x delete · r render preview · q quit[/dim]"
+            "[dim]n/p navigate · bracket keys swap template · d duplicate · x delete · r render preview · q quit[/dim]"
             + (f"\n\n[green]{message}[/green]" if message else "")
         )
 

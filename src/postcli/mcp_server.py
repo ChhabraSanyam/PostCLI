@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP, Image
+from mcp.types import CallToolResult, TextContent
 
 from .inspection import create_contact_sheet, inspect_photo_set as scan_photo_set
 from .models import Canvas, CarouselPlan
@@ -22,13 +23,21 @@ def list_templates() -> list[dict[str, object]]:
 
 
 @mcp.tool()
-def inspect_photo_set(paths: list[str], contact_sheet_path: str | None = None) -> list[Any]:
+def inspect_photo_set(paths: list[str], contact_sheet_path: str | None = None) -> CallToolResult:
     """Inspect local image paths and return dimensions plus a labelled contact-sheet image for subject-aware planning."""
     assets = scan_photo_set(paths)
     output = Path(contact_sheet_path).expanduser() if contact_sheet_path else Path.cwd() / ".postcli-contact-sheet.png"
     sheet = create_contact_sheet(assets, output)
     metadata = {"assets": [asset.model_dump() for asset in assets], "contact_sheet_path": str(sheet), "notice": "Original photos remain local. Use the labelled contact sheet to identify subjects before proposing a layout."}
-    return [json.dumps(metadata), Image(path=sheet)]
+    # Return explicit MCP content blocks. A list[Any] response makes FastMCP
+    # attempt JSON serialization of its Image helper instead of emitting an
+    # image-content block over stdio.
+    return CallToolResult(
+        content=[
+            TextContent(type="text", text=json.dumps(metadata)),
+            Image(path=sheet).to_image_content(),
+        ]
+    )
 
 
 @mcp.tool()
