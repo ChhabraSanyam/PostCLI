@@ -7,19 +7,34 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.types import CallToolResult, TextContent
 
+from .canvas import canvas_catalog
 from .inspection import create_contact_sheet, inspect_photo_set as scan_photo_set
 from .models import Canvas, CarouselPlan
 from .project import create_project, load_project, save_project, update_project
 from .render import export_carousel as write_carousel, render_preview
 from .templates import template_catalog
 
-mcp = FastMCP("PostCLI", instructions="Local-first photo carousel composer. Inspect assets before proposing a structured carousel plan.")
+mcp = FastMCP(
+    "PostCLI",
+    instructions=(
+        "Local-first photo carousel composer. Before proposing a plan, inspect the assets and list both templates "
+        "and canvas presets. Propose three plans using returned asset IDs, then choose one before create_carousel. "
+        "Captions are per-slide metadata recommendations; never treat them as text overlays. Use the original local "
+        "paths and a selected canvas size when creating the project."
+    ),
+)
 
 
 @mcp.tool()
 def list_templates() -> list[dict[str, object]]:
-    """List the locally available adaptive photo-collage templates and their slot counts."""
+    """List adaptive photo-collage templates, including their intent and maximum slot count."""
     return template_catalog()
+
+
+@mcp.tool()
+def list_canvas_presets() -> list[dict[str, object]]:
+    """List social-media canvas presets, including IDs, dimensions, and intended use."""
+    return canvas_catalog()
 
 
 @mcp.tool()
@@ -42,7 +57,10 @@ def inspect_photo_set(paths: list[str], contact_sheet_path: str | None = None) -
 
 @mcp.tool()
 def create_carousel(plan: dict[str, Any], asset_paths: list[str], project_path: str, canvas_width: int = 1080, canvas_height: int = 1350) -> dict[str, Any]:
-    """Create and persist an editable carousel from a structured agent-authored plan and local photo paths."""
+    """Create an editable local project from a selected plan, original asset paths, and canvas dimensions.
+
+    Plans reference inspected asset IDs. Per-slide ``caption`` values are saved as metadata and are not rendered over photos.
+    """
     assets = scan_photo_set(asset_paths)
     parsed_plan = CarouselPlan.model_validate(plan)
     project = create_project(parsed_plan, assets, Canvas(width=canvas_width, height=canvas_height))
@@ -52,7 +70,14 @@ def create_carousel(plan: dict[str, Any], asset_paths: list[str], project_path: 
 
 @mcp.tool()
 def update_carousel(project_path: str, operation: str, slide_index: int | None = None, values: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Apply a validated edit: reorder_slide, swap_template, set_assets, set_palette, set_headline, adjust_asset, duplicate_slide, or delete_slide."""
+    """Apply a validated project edit.
+
+    Operations are: ``set_canvas`` (values: width, height, optional background), ``reorder_slide`` (from_index,
+    to_index), ``reorder_assets`` (from_index, to_index), ``swap_template`` (template_id), ``set_assets``
+    (asset_ids), ``set_palette`` (palette), ``set_caption`` (text metadata), ``adjust_asset`` (asset_id plus any
+    focus_x, focus_y, zoom, brightness, contrast), ``duplicate_slide``, and ``delete_slide``. Except for
+    ``set_canvas`` and ``reorder_slide``, provide a valid slide_index.
+    """
     project = load_project(project_path)
     update_project(project, operation, slide_index, values)
     saved_path = save_project(project, project_path)
@@ -61,7 +86,7 @@ def update_carousel(project_path: str, operation: str, slide_index: int | None =
 
 @mcp.tool()
 def render_carousel_preview(project_path: str, preview_path: str, slide_index: int = 0) -> Image:
-    """Render one slide of a local project as an image preview for review in the agent conversation."""
+    """Render one slide to a local PNG and return it for review; caption metadata is not overlaid."""
     project = load_project(project_path)
     rendered = render_preview(project, preview_path, slide_index)
     return Image(path=rendered)

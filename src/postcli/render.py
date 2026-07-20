@@ -2,18 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageOps
 
-from .models import Asset, AssetAdjustment, PostProject, ShapeLayer, Slide, TextLayer
+from .models import Asset, AssetAdjustment, PostProject, ShapeLayer, Slide
 from .templates import get_template
-
-
-def _font(size: int):
-    for candidate in ("/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf"):
-        if Path(candidate).exists():
-            return ImageFont.truetype(candidate, size)
-    return ImageFont.load_default(size=size)
-
 
 def _cover_asset(asset: Asset, adjustment: AssetAdjustment, size: tuple[int, int]) -> Image.Image:
     with Image.open(asset.path) as source:
@@ -62,16 +54,6 @@ def render_slide(project: PostProject, slide_index: int) -> Image.Image:
                     round((layer.y + layer.height) * project.canvas.height),
                 ),
                 fill=layer.color,
-            )
-        elif isinstance(layer, TextLayer):
-            draw.multiline_text(
-                (round(layer.x * project.canvas.width), round(layer.y * project.canvas.height)),
-                layer.text,
-                font=_font(layer.size),
-                fill=layer.color,
-                spacing=4,
-                stroke_width=1,
-                stroke_fill="#000000",
             )
     return canvas
 

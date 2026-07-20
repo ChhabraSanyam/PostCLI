@@ -10,7 +10,7 @@ from postcli import mcp_server
 def test_mcp_tools_are_registered():
     # FastMCP keeps the decorated functions callable and exposes them on the server.
     tool_names = set(mcp_server.mcp._tool_manager._tools)
-    assert {"inspect_photo_set", "list_templates", "create_carousel", "update_carousel", "render_carousel_preview", "export_carousel"}.issubset(tool_names)
+    assert {"inspect_photo_set", "list_templates", "list_canvas_presets", "create_carousel", "update_carousel", "render_carousel_preview", "export_carousel"}.issubset(tool_names)
 
 
 def test_mcp_inspection_returns_metadata_and_image(tmp_path):

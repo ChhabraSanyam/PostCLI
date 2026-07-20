@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .models import AssetAdjustment, CarouselPlan, PostProject, Slide, TextLayer
+from .models import AssetAdjustment, Canvas, CarouselPlan, PostProject, Slide
 from .templates import get_template
 
 
@@ -23,13 +23,12 @@ def create_project(plan: CarouselPlan, assets, canvas=None) -> PostProject:
         unknown = set(plan_slide.asset_ids) - set(asset_map)
         if unknown:
             raise ValueError(f"Plan references unknown asset IDs: {', '.join(sorted(unknown))}")
-        layers = [TextLayer(text=plan_slide.headline)] if plan_slide.headline else []
         slides.append(
             Slide(
                 template_id=template.id,
                 assets=[AssetAdjustment(asset_id=asset_id) for asset_id in plan_slide.asset_ids],
                 palette=plan_slide.palette,
-                layers=layers,
+                caption=plan_slide.caption or plan_slide.headline,
             )
         )
     return PostProject(name=plan.name, canvas=canvas or Canvas(), assets=list(assets), slides=slides, music_recommendations=plan.music_recommendations)
@@ -56,6 +55,13 @@ def update_project(project: PostProject, operation: str, slide_index: int | None
             raise ValueError("Slide indices are out of range.")
         project.slides.insert(target, project.slides.pop(source))
         return project
+    if operation == "set_canvas":
+        project.canvas = Canvas(
+            width=int(values["width"]),
+            height=int(values["height"]),
+            background=str(values.get("background", project.canvas.background)),
+        )
+        return project
     if slide_index is None or not 0 <= slide_index < len(project.slides):
         raise ValueError("A valid slide_index is required for this operation.")
     slide = project.slides[slide_index]
@@ -64,6 +70,11 @@ def update_project(project: PostProject, operation: str, slide_index: int | None
         if len(slide.assets) > template.slot_count:
             raise ValueError("The selected template has too few slots for this slide's assets.")
         slide.template_id = template.id
+    elif operation == "reorder_assets":
+        source, target = int(values["from_index"]), int(values["to_index"])
+        if not (0 <= source < len(slide.assets) and 0 <= target < len(slide.assets)):
+            raise ValueError("Photo indices are out of range.")
+        slide.assets.insert(target, slide.assets.pop(source))
     elif operation == "set_assets":
         template = get_template(slide.template_id)
         asset_ids = list(values["asset_ids"])
@@ -80,13 +91,9 @@ def update_project(project: PostProject, operation: str, slide_index: int | None
         if not palette:
             raise ValueError("A palette requires at least one colour.")
         slide.palette = palette
-    elif operation == "set_headline":
+    elif operation in {"set_caption", "set_headline"}:
         text = str(values["text"])
-        existing = next((layer for layer in slide.layers if isinstance(layer, TextLayer)), None)
-        if existing:
-            existing.text = text
-        else:
-            slide.layers.append(TextLayer(text=text))
+        slide.caption = text
     elif operation == "adjust_asset":
         adjustment = next((item for item in slide.assets if item.asset_id == values["asset_id"]), None)
         if not adjustment:

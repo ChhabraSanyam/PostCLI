@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Asset(BaseModel):
@@ -53,6 +53,16 @@ class Slide(BaseModel):
     assets: list[AssetAdjustment] = Field(default_factory=list)
     palette: list[str] = Field(default_factory=lambda: ["#151515", "#f8f5ef"])
     layers: list[Layer] = Field(default_factory=list)
+    caption: str | None = None
+
+    @model_validator(mode="after")
+    def migrate_legacy_text_layers(self) -> "Slide":
+        """Keep captions as metadata and remove legacy on-image headline layers."""
+        legacy_headline = next((layer.text for layer in self.layers if isinstance(layer, TextLayer)), None)
+        if self.caption is None:
+            self.caption = legacy_headline
+        self.layers = [layer for layer in self.layers if not isinstance(layer, TextLayer)]
+        return self
 
 
 class Canvas(BaseModel):
@@ -87,6 +97,7 @@ class CarouselPlanSlide(BaseModel):
     template_id: str
     asset_ids: list[str] = Field(min_length=1)
     palette: list[str] = Field(default_factory=lambda: ["#151515", "#f8f5ef"])
+    caption: str | None = None
     headline: str | None = None
     rationale: str | None = None
 

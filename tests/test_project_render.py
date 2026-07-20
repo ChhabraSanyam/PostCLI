@@ -32,10 +32,13 @@ def test_create_save_edit_render_and_export_carousel(tmp_path):
         ],
     )
     project = create_project(plan, assets)
+    assert project.slides[0].caption == "Weekend"
+    assert project.slides[0].layers == []
     project.canvas.width = 400
     project.canvas.height = 500
     source = save_project(project, tmp_path / "summer")
     update_project(project, "adjust_asset", 0, {"asset_id": assets[0].id, "focus_x": 0.2, "brightness": 1.2})
+    update_project(project, "reorder_assets", 0, {"from_index": 0, "to_index": 2})
     update_project(project, "reorder_slide", values={"from_index": 1, "to_index": 0})
     save_project(project, source)
 
@@ -45,7 +48,8 @@ def test_create_save_edit_render_and_export_carousel(tmp_path):
     assert Image.open(preview).size == (400, 500)
     assert [path.name for path in outputs] == ["01-summer-test.png", "02-summer-test.png"]
     assert all(path.exists() for path in outputs)
-    assert load_project(source).slides[1].assets[0].brightness == 1.2
+    assert load_project(source).slides[1].assets[-1].asset_id == assets[0].id
+    assert load_project(source).slides[1].assets[-1].brightness == 1.2
 
 
 def test_project_rejects_unknown_assets_and_invalid_template_capacity(tmp_path):

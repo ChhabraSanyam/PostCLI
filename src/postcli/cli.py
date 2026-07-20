@@ -5,9 +5,10 @@ from pathlib import Path
 
 import typer
 
+from .canvas import get_canvas_preset
 from .inspection import create_contact_sheet, inspect_photo_set
 from .mcp_server import run as run_mcp
-from .models import CarouselPlan, CarouselPlanSlide
+from .models import Canvas, CarouselPlan, CarouselPlanSlide
 from .templates import get_template
 from .project import create_project, load_project, save_project
 from .render import export_carousel, render_preview
@@ -40,6 +41,9 @@ def new(
     images: list[Path] = typer.Argument(..., help="Photos for the first slide."),
     template_id: str = typer.Option("clean-grid", "--template"),
     name: str = typer.Option("My carousel", "--name"),
+    canvas_preset: str = typer.Option("instagram-portrait", "--canvas", help="Named social canvas preset."),
+    width: int | None = typer.Option(None, "--width", min=64, help="Custom canvas width; requires --height."),
+    height: int | None = typer.Option(None, "--height", min=64, help="Custom canvas height; requires --width."),
 ) -> None:
     """Create an editable project without an agent, using one collage slide."""
     assets = inspect_photo_set(images)
@@ -51,7 +55,14 @@ def new(
             for index in range(0, len(assets), slot_count)
         ],
     )
-    created = create_project(plan, assets)
+    if (width is None) != (height is None):
+        raise typer.BadParameter("Use --width and --height together for a custom canvas.")
+    if width is None:
+        preset = get_canvas_preset(canvas_preset)
+        canvas = Canvas(width=preset.width, height=preset.height)
+    else:
+        canvas = Canvas(width=width, height=height)
+    created = create_project(plan, assets, canvas)
     saved = save_project(created, project)
     typer.echo(f"Created {saved}")
 
