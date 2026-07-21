@@ -138,7 +138,7 @@ def test_editor_compacts_long_photo_names(tmp_path):
             assert label.startswith("a-very-long-")
             assert label.endswith("…")
             assert ".jpeg" not in label
-            assert len(label) == 18
+            assert len(label) == 24
             await pilot.press("q")
 
     asyncio.run(drive_editor())

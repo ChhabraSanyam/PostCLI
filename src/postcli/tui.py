@@ -79,7 +79,7 @@ class PostEditor(App[None]):
     def on_mount(self) -> None:
         self._refresh_summary()
 
-    def _asset_name(self, asset_id: str, max_length: int = 18) -> str:
+    def _asset_name(self, asset_id: str, max_length: int = 24) -> str:
         """Return a compact, recognizable filename for the terminal summary."""
         filename = next((asset.filename for asset in self.project.assets if asset.id == asset_id), asset_id)
         stem = Path(filename).stem
