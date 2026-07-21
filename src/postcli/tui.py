@@ -7,11 +7,12 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.events import Resize
+from textual.markup import escape
 from textual.widgets import Footer, Header, Static
 
 from .canvas import CANVAS_PRESETS, preset_for_size
 from .kitty import cursor_to, delete_image, fit_placement, place_png, supports_graphics
-from .project import load_project, save_project, update_project
+from .project import load_project, project_path, save_project, update_project
 from .render import render_slide
 from .templates import TEMPLATES
 
@@ -61,7 +62,7 @@ class PostEditor(App[None]):
 
     def __init__(self, source: str | Path) -> None:
         super().__init__()
-        self.source = Path(source).expanduser().resolve()
+        self.source = project_path(source)
         self.project = load_project(self.source)
         self.slide_index = 0
         self.asset_index = 0
@@ -78,13 +79,21 @@ class PostEditor(App[None]):
     def on_mount(self) -> None:
         self._refresh_summary()
 
+    def _asset_name(self, asset_id: str, max_length: int = 18) -> str:
+        """Return a compact, recognizable filename for the terminal summary."""
+        filename = next((asset.filename for asset in self.project.assets if asset.id == asset_id), asset_id)
+        stem = Path(filename).stem
+        return stem if len(stem) <= max_length else f"{stem[:max_length - 1]}…"
+
     def _refresh_summary(self, message: str = "") -> None:
         slide = self.project.slides[self.slide_index]
         selected = self._selected_asset()
         preset = preset_for_size(self.project.canvas.width, self.project.canvas.height)
         canvas_name = preset.name if preset else "Custom canvas"
         assigned = ", ".join(
-            f"{'●' if index == self.asset_index else '○'} {item.asset_id}" for index, item in enumerate(slide.assets)
+            f"{'●' if index == self.asset_index else '○'} {index + 1}. "
+            f"{escape(self._asset_name(item.asset_id))}"
+            for index, item in enumerate(slide.assets)
         )
         self.query_one("#summary", Static).update(
             f"[b]{self.project.name}[/b]  •  Slide {self.slide_index + 1}/{len(self.project.slides)}\n\n"
@@ -183,17 +192,35 @@ class PostEditor(App[None]):
 
     def _move_asset(self, direction: int) -> None:
         target = self.asset_index + direction
-        if not 0 <= target < len(self.project.slides[self.slide_index].assets):
-            self._refresh_summary("Photo is already at the edge of this template.")
+        if 0 <= target < len(self.project.slides[self.slide_index].assets):
+            update_project(
+                self.project,
+                "reorder_assets",
+                self.slide_index,
+                {"from_index": self.asset_index, "to_index": target},
+            )
+            self.asset_index = target
+            self._save(f"Moved selected photo to slot {target + 1}.")
             return
-        update_project(
-            self.project,
-            "reorder_assets",
-            self.slide_index,
-            {"from_index": self.asset_index, "to_index": target},
-        )
-        self.asset_index = target
-        self._save(f"Moved selected photo to slot {target + 1}.")
+
+        old_asset_count = len(self.project.slides[self.slide_index].assets)
+        try:
+            update_project(
+                self.project,
+                "move_asset",
+                self.slide_index,
+                {"asset_index": self.asset_index, "direction": direction},
+            )
+        except ValueError as error:
+            self._refresh_summary(str(error))
+            return
+        if direction == 1:
+            self.slide_index += 0 if old_asset_count == 1 else 1
+            self.asset_index = 0
+        else:
+            self.slide_index -= 1
+            self.asset_index = len(self.project.slides[self.slide_index].assets) - 1
+        self._save("Moved selected photo to the adjacent slide.")
 
     def action_move_asset_left(self) -> None:
         self._move_asset(-1)
@@ -259,12 +286,14 @@ class PostEditor(App[None]):
         template_ids = list(TEMPLATES)
         current = self.project.slides[self.slide_index].template_id
         start = template_ids.index(current)
-        for offset in range(1, len(template_ids) + 1):
-            candidate = template_ids[(start + direction * offset) % len(template_ids)]
-            if TEMPLATES[candidate].slot_count >= len(self.project.slides[self.slide_index].assets):
-                update_project(self.project, "swap_template", self.slide_index, {"template_id": candidate})
-                self._save(f"Template changed to {candidate}.")
-                return
+        candidate = template_ids[(start + direction) % len(template_ids)]
+        try:
+            update_project(self.project, "swap_template", self.slide_index, {"template_id": candidate})
+        except ValueError as error:
+            self._refresh_summary(str(error))
+            return
+        self.asset_index = min(self.asset_index, len(self.project.slides[self.slide_index].assets) - 1)
+        self._save(f"Template changed to {candidate}; extra photos carried forward.")
 
     def action_next_template(self) -> None:
         self._switch_template(1)

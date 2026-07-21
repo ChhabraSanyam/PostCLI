@@ -36,10 +36,11 @@ def test_mcp_create_preview_and_export_flow(tmp_path):
     project_path = tmp_path / "demo.postcli.json"
 
     created = mcp_server.create_carousel(plan, [str(first), str(second)], str(project_path), 320, 400)
-    rendered = mcp_server.render_carousel_preview(created["project_path"], str(tmp_path / "preview.png"))
-    exported = mcp_server.export_carousel(created["project_path"], str(tmp_path / "exports"))
+    rendered = mcp_server.render_carousel_preview(created["project_path"])
+    exported = mcp_server.export_carousel(created["project_path"])
 
     assert Path(created["project_path"]).exists()
-    assert (tmp_path / "preview.png").exists()
-    assert rendered.path == tmp_path / "preview.png"
+    assert Path(created["project_directory"]) == Path(created["project_path"]).parent
+    assert rendered.path == Path(created["project_path"]).parent / "previews" / "slide-01.png"
     assert [Path(item).name for item in exported["files"]] == ["01-mcp-demo.png"]
+    assert Path(exported["files"][0]).parent == Path(created["project_path"]).parent / "exports"

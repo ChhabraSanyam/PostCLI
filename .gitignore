@@ -6,6 +6,5 @@ dist/
 *.postcli.json
 exports/
 previews/
+projects/
 .DS_Store
-testing
-pics

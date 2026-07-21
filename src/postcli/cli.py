@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 
 import typer
@@ -10,7 +11,13 @@ from .inspection import create_contact_sheet, inspect_photo_set
 from .mcp_server import run as run_mcp
 from .models import Canvas, CarouselPlan, CarouselPlanSlide
 from .templates import get_template
-from .project import create_project, load_project, save_project
+from .project import (
+    create_project,
+    create_project_folder,
+    load_project,
+    project_artifact_path,
+    require_project_artifact_path,
+)
 from .render import export_carousel, render_preview
 from .templates import template_catalog
 from .tui import PostEditor
@@ -27,17 +34,17 @@ def templates() -> None:
 @app.command("scan")
 def scan(
     paths: list[Path] = typer.Argument(..., help="Image files or directories to inspect."),
-    contact_sheet: Path = typer.Option(Path("contact-sheet.png"), "--contact-sheet", "-o"),
+    contact_sheet: Path | None = typer.Option(None, "--contact-sheet", "-o", help="Optional contact-sheet destination."),
 ) -> None:
-    """Inspect local images and write a labelled contact sheet."""
+    """Inspect local images and write a labelled contact sheet outside the working directory by default."""
     assets = inspect_photo_set(paths)
-    output = create_contact_sheet(assets, contact_sheet)
+    output = create_contact_sheet(assets, contact_sheet or Path(tempfile.gettempdir()) / "postcli-contact-sheet.png")
     typer.echo(json.dumps({"assets": [asset.model_dump() for asset in assets], "contact_sheet": str(output)}, indent=2))
 
 
 @app.command("new")
 def new(
-    project: Path = typer.Argument(..., help="Destination project .postcli.json path."),
+    project: Path = typer.Argument(..., help="New, empty project folder to create."),
     images: list[Path] = typer.Argument(..., help="Photos for the first slide."),
     template_id: str = typer.Option("clean-grid", "--template"),
     name: str = typer.Option("My carousel", "--name"),
@@ -45,7 +52,7 @@ def new(
     width: int | None = typer.Option(None, "--width", min=64, help="Custom canvas width; requires --height."),
     height: int | None = typer.Option(None, "--height", min=64, help="Custom canvas height; requires --width."),
 ) -> None:
-    """Create an editable project without an agent, using one collage slide."""
+    """Create an editable project in a new folder without an agent."""
     assets = inspect_photo_set(images)
     slot_count = get_template(template_id).slot_count
     plan = CarouselPlan(
@@ -63,7 +70,7 @@ def new(
     else:
         canvas = Canvas(width=width, height=height)
     created = create_project(plan, assets, canvas)
-    saved = save_project(created, project)
+    saved = create_project_folder(created, project)
     typer.echo(f"Created {saved}")
 
 
@@ -83,24 +90,34 @@ def edit(project: Path = typer.Argument(...)) -> None:
 @app.command("preview")
 def preview(
     project: Path = typer.Argument(...),
-    output: Path = typer.Option(Path("preview.png"), "--output", "-o"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="PNG path within the project folder."),
     slide: int = typer.Option(1, "--slide", min=1),
 ) -> None:
     """Render one slide to PNG."""
     loaded = load_project(project)
     if slide > len(loaded.slides):
         raise typer.BadParameter("Slide is out of range.")
-    typer.echo(render_preview(loaded, output, slide - 1))
+    destination = (
+        require_project_artifact_path(project, output)
+        if output
+        else project_artifact_path(project, "previews", f"slide-{slide:02d}.png")
+    )
+    typer.echo(render_preview(loaded, destination, slide - 1))
 
 
 @app.command("export")
 def export(
     project: Path = typer.Argument(...),
-    output_directory: Path = typer.Argument(...),
+    output_directory: Path | None = typer.Option(None, "--output", "-o", help="Directory inside the project folder."),
     image_format: str = typer.Option("png", "--format"),
 ) -> None:
-    """Export every slide as a numbered PNG/JPEG file."""
-    outputs = export_carousel(load_project(project), output_directory, image_format)
+    """Export every slide as a numbered PNG/JPEG file under the project's exports folder."""
+    destination = (
+        require_project_artifact_path(project, output_directory)
+        if output_directory
+        else project_artifact_path(project, "exports", "")
+    )
+    outputs = export_carousel(load_project(project), destination, image_format)
     typer.echo("\n".join(str(item) for item in outputs))
 
 
